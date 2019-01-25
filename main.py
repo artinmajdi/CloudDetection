@@ -4,28 +4,81 @@ from skimage.filters import threshold_otsu as otsu
 import numpy as np
 from imageio import imread, imwrite
 from tqdm import tqdm
+from scipy.ndimage import morphology
+import cv2
 
 
+Dir = '/media/data1/artin/Cloud Data/images/'
 
-Dir = '/media/data1/artin/Datasets/Clearing/Visible-(Jul29(211)-Aug10(223))/'
-List = os.listdir(Dir)
-List = [i for i in List if '.jpg' in i]
-for ind, lst in tqdm(enumerate(List),desc='looping through images'):
-    im = imread(Dir + List[ind])
+Land = imread(Dir + 'Land.jpg')
+Land2 = Land[...,0] > 100
 
-    for i in range(3):
-        ms = np.expand_dims(  im[...,i] > otsu(im[...,i])   ,axis=2)
-        msk = ms if i == 0  else np.concatenate((msk,ms),axis=2)
+RegionOfInterest = imread(Dir + 'RegionOfInterest.jpg')
+RegionOfInterest = RegionOfInterest[...,0] > 100
 
-    msk = (256*np.float32(msk))
-    imwrite(Dir + List[ind].split('.jpg')[0] + '_mask.jpg' , msk)
+def creatinMask(Dir, Land2):
+
+    List = [i for i in os.listdir(Dir) if '.jpg' in i and 'mask' not in i]
+    LandIx = np.where(Land2)
+
+    for ind, lst in tqdm(enumerate(List),desc='looping through images'):
+        im = imread(Dir + lst)
+        # print('ind',ind)
+        for i in range(3):
+
+            im2 = im[...,i]
+            im2[LandIx] = 0
+            im[...,i] = im2
+
+            msk2 = im[...,i] > otsu(im[...,i])
+
+            ms = np.expand_dims(msk2,axis=2)
+            msk = ms if i == 0  else np.concatenate((msk,ms),axis=2)
+
+        msk = (256*np.float32(msk))
+        imwrite(Dir + lst.split('.jpg')[0] + '_mask.jpg' , msk)
+
+def creatingThePatternMask(Dir, Land2, RegionOfInterest):
+    List = [i for i in os.listdir(Dir) if 'mask.jpg' in i]
+    LandIx = np.where(Land2 == 1)
+    nROI_Ix = np.where(RegionOfInterest == 0)
+    ROI_Ix = np.where(RegionOfInterest == 1)
+
+    Area = 0.9*RegionOfInterest.sum()
+    for lst in tqdm(List[155:],desc='looping through images'):
+        msk = imread(Dir + lst)[...,0] > 100        
+        msk2 = 1 - msk
+        msk2[nROI_Ix] = 0
+        if msk2[ROI_Ix].sum() > Area: msk2 *= 0
+
+        msk2[LandIx] = 0
+        msk2 = (256*np.float32(msk2))
+        imwrite(Dir + lst.split('.jpg')[0] + '_Pattern.jpg' , msk2)
 
 
+# creatinMask(Dir, Land2)
 
-# fig , axs = plt.subplots(2,2)
-# axs[0,0].imshow(im)
-# axs[0,1].imshow(msk[...,0],cmap='gray')
-# axs[1,0].imshow(msk[...,1],cmap='gray')
-# axs[1,1].imshow(msk[...,2],cmap='gray')
-# plt.show()
-print(im.shape)
+# creatingThePatternMask(Dir, Land2, RegionOfInterest)
+
+
+# image_folder = 'images'
+video_name = 'video.avi'
+Dir2 = Dir
+List = [i for i in os.listdir(Dir2) if 'goes' in i and '_Pattern.jpg' not in i and 'mask.jpg' not in i]
+List.sort()
+frame = cv2.imread(os.path.join(Dir2, List[0].split('.jpg')[0] + '_mask_Pattern.jpg' ))
+height, width, layers = frame.shape
+
+video = cv2.VideoWriter(Dir2 + 'pattern.avi', 0, 3, (width,height))
+video2 = cv2.VideoWriter(Dir2 + 'original.avi', 0, 3, (width,height))
+
+for image in tqdm(List):
+
+    im = cv2.imread(os.path.join(Dir2, image))
+    pattern = cv2.imread(os.path.join(Dir2, image.split('.jpg')[0] + '_mask_Pattern.jpg'))
+    # A = np.concatenate((im,pattern),axis=1)
+    video.write(pattern)
+    video2.write(im)
+
+cv2.destroyAllWindows()
+video.release()
