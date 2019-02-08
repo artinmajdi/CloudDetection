@@ -1,4 +1,4 @@
-function extractObjects(Dir)
+function extractObjects(Dir,ActualArea)
 
     ListImages = func_listImages(Dir);
     
@@ -11,9 +11,13 @@ function extractObjects(Dir)
         
         disp(['ind: ',num2str(ind),'/',num2str(length(ListImages))])
         name = strsplit(ListImages(ind).name,'.jpg'); name = name{1};
+
+        imm = imread([Dir , name, '.jpg']);
         mask = imread([Dir , name, '_mask_Pattern.jpg']) > 100;
         
-        [imObjects_WithInfo, imObjects] = Apply_Detection(mask);
+        [imm2, imObjects_WithInfo, imObjects] = Apply_Detection(imm, mask,ActualArea);                       
+        
+        imwrite(imm2, [Dir , name, '_processed.jpg'])
         imwrite(imObjects, [Dir , name, '_Objects.jpg'])
         imwrite(imObjects_WithInfo, [Dir , name, '_Objects_wInfo.jpg'])
         
@@ -30,14 +34,14 @@ function ListImages = func_listImages(Dir)
     List = dir(Dir);
     ListImages = [];
     for ls = 1:length(List)
-        if ~contains(List(ls).name, 'mask') && contains(List(ls).name, 'jpg') && contains(List(ls).name, 'goes') && ~contains(List(ls).name,'Objects')
+        if ~contains(List(ls).name, '_processed') &&  ~contains(List(ls).name, 'mask') && contains(List(ls).name, 'jpg') && contains(List(ls).name, 'goes') && ~contains(List(ls).name,'Objects')
            ListImages = [ListImages,List(ls)];
         end
     end
 
 end
 
-function [imObjects_WithInfo, imObjects] = Apply_Detection(mask)
+function [imm2, imObjects_WithInfo, imObjects] = Apply_Detection(imm, mask,ActualArea)
 
     mask2 = imclose(mask,strel('disk',2));
     mask2 = imopen(mask2,strel('disk',4));
@@ -64,15 +68,27 @@ function [imObjects_WithInfo, imObjects] = Apply_Detection(mask)
     
 %     CC = bwconncomp(mask2);
 %     L = labelmatrix(CC);
-
+    edgeImage = edge(maskColored);
+    imm2 = imm;
+    imm2(:,:,1) = imm(:,:,1) + 255*uint8(edgeImage);
+    imm2(:,:,2) = imm(:,:,2) + 248*uint8(edgeImage);
+    
     L = bwlabel(maskColored);
     imObjects = label2rgb(L);
 
     if ~isempty(Centroid)
+        objectArea = Area*0;
+        for oIx=1:length(obj2)
+            objectArea(oIx) = round(sum(ActualArea(cat(1,obj2(oIx).PixelIdxList))));
+        end
         imObjects_WithInfo = insertMarker(imObjects,Centroid,'x','Color','black');
-        imObjects_WithInfo = insertText(imObjects_WithInfo,Centroid,Area,'TextColor','black','BoxOpacity',0);
+        imObjects_WithInfo = insertText(imObjects_WithInfo,Centroid,objectArea,'TextColor','black','BoxOpacity',0);
+        
+        imm2 = insertMarker(imm2,Centroid,'x','Color','yellow');
+        imm2 = insertText(imm2,Centroid,objectArea,'TextColor','yellow','BoxOpacity',0,'FontSize',20);        
     else
         imObjects_WithInfo = imObjects;
+        imm2 = imm;
     end
     
 end

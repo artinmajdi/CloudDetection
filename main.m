@@ -4,4 +4,6 @@ close all
 
 
 Dir = '/media/data1/artin/CloudData/images/';
-extractObjects(Dir)
+load('Pixels_geographical information.mat')
+
+extractObjects(Dir,area)
