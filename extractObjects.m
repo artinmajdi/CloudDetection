@@ -1,42 +1,35 @@
-function extractObjects(Dir,ActualArea)
+function extractObjects(DirMain)
 
+    
+    Dir = [DirMain , '/images/'];
+    ActualArea = load([DirMain , 'code/referenceImages/areaMatrix.mat']);
+    Land = imread([DirMain , 'code/referenceImages/LandMask_from_LatLong.jpg']) > 100;
+    
+    
     ListImages = func_listImages(Dir);
     
-%     f = figure; 
-%     uip = uipanel ( 'parent', f, 'position', [0.2 0.2 0.4 0.4] ); 
-%     h = cProgress ( 0, 'Embedded', 'parent', uip, 'outerColor', [0 0 1] ); 
-
-%     % p = ProgressBar( length(ListImages),'verbose',1 ); % 
     for ind = 1:length(ListImages)
         
         disp(['ind: ',num2str(ind),'/',num2str(length(ListImages))])
         name = strsplit(ListImages(ind).name,'.jpg'); name = name{1};
 
         imm = imread([Dir , name, '.jpg']);
-        mask = imread([Dir , name, '_mask_Pattern.jpg']) > 100;
+        [cloudMask, cloudMaskGray, EmptyAreaMask]  = creatingEmptyAreaMask(imm , Land);
+%         mask = imread([Dir , name, '_PP_EmptyAreaMask.jpg']) > 100;
         
-        [imm2, imObjects_WithInfo, imObjects] = Apply_Detection(imm, mask,ActualArea);                       
+        [imm2, imObjects_WithInfo, imObjects] = Apply_Detection(imm, EmptyAreaMask,ActualArea.area);                       
         
-        imwrite(imm2, [Dir , name, '_processed.jpg'])
-        imwrite(imObjects, [Dir , name, '_Objects.jpg'])
-        imwrite(imObjects_WithInfo, [Dir , name, '_Objects_wInfo.jpg'])
         
-%         strg = ['ind: ',num2str(ind),'/',num2str(length(ListImages))];
-%         cProgress ( ind, h , strg) 
-%         % p.progress;
-    end
-%     % p.stop;
-%     delete ( h ); 
-end
+        
+        imwrite(cloudMask, [Dir , name, '_PP_cloudMask.jpg'])
+        imwrite(cloudMaskGray, [Dir , name, '_PP_cloudMaskGray.jpg'])
+        imwrite(EmptyAreaMask, [Dir , name, '_PP_EmptyAreaMask.jpg'])
 
-function ListImages = func_listImages(Dir)
 
-    List = dir(Dir);
-    ListImages = [];
-    for ls = 1:length(List)
-        if ~contains(List(ls).name, '_processed') &&  ~contains(List(ls).name, 'mask') && contains(List(ls).name, 'jpg') && contains(List(ls).name, 'goes') && ~contains(List(ls).name,'Objects')
-           ListImages = [ListImages,List(ls)];
-        end
+        imwrite(imm2, [Dir , name, '_PP_Final.jpg'])
+        imwrite(imObjects, [Dir , name, '_PP_Objects.jpg'])
+        imwrite(imObjects_WithInfo, [Dir , name, '_PP_Objects_wInfo.jpg'])
+        
     end
 
 end

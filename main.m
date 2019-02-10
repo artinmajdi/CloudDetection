@@ -1,11 +1,9 @@
-% clear
-% clc
-% close all
+% function main()
+clear
+clc
+close all
 
+Dir = '/media/data1/artin/CloudData/';
 
-Dir = '/media/data1/artin/CloudData/images/';
-imwrite(Land_MASK, [Dir , 'LandMask_from_LatLong.jpg'])
- 
-% load('Pixels_geographical information.mat')
+extractObjects(Dir)
 
-% extractObjects(Dir,area)
