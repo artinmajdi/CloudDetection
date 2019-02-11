@@ -1,87 +1,154 @@
-function extractObjects(DirMain)
+function [output1, output2] = extractObjects(UserInfo)
 
     
-    Dir = [DirMain , '/images/'];
-    ActualArea = load([DirMain , 'code/referenceImages/areaMatrix.mat']);
-    Land = imread([DirMain , 'code/referenceImages/LandMask_from_LatLong.jpg']) > 100;
+    Input = readingInputData(UserInfo.Directory);
+    if UserInfo.Overlay.Mode == 2
+        UserInfo.unit = 'Km2';
+    else
+        UserInfo.unit = 'Pixel';
+    end
     
-    
-    ListImages = func_listImages(Dir);
+    ListImages = func_listImages(UserInfo.Directory.Images);
     
     for ind = 1:length(ListImages)
+                
+        UserInfo.name = strsplit(ListImages(ind).name,'.jpg'); UserInfo.name = UserInfo.name{1};
         
-        disp(['ind: ',num2str(ind),'/',num2str(length(ListImages))])
-        name = strsplit(ListImages(ind).name,'.jpg'); name = name{1};
+        disp(['ind: (',num2str(ind),'/',num2str(length(ListImages)), ')   ', UserInfo.name])
 
-        imm = imread([Dir , name, '.jpg']);
-        [cloudMask, cloudMaskGray, EmptyAreaMask]  = creatingEmptyAreaMask(imm , Land);
-%         mask = imread([Dir , name, '_PP_EmptyAreaMask.jpg']) > 100;
+        imm = imread([UserInfo.Directory.Images , UserInfo.name, '.jpg']);
+        output1  = creatingEmptyAreaMask(imm , Input.Land, UserInfo);
         
-        [imm2, imObjects_WithInfo, imObjects] = Apply_Detection(imm, EmptyAreaMask,ActualArea.area);                       
-        
-        
-        
-        imwrite(cloudMask, [Dir , name, '_PP_cloudMask.jpg'])
-        imwrite(cloudMaskGray, [Dir , name, '_PP_cloudMaskGray.jpg'])
-        imwrite(EmptyAreaMask, [Dir , name, '_PP_EmptyAreaMask.jpg'])
-
-
-        imwrite(imm2, [Dir , name, '_PP_Final.jpg'])
-        imwrite(imObjects, [Dir , name, '_PP_Objects.jpg'])
-        imwrite(imObjects_WithInfo, [Dir , name, '_PP_Objects_wInfo.jpg'])
-        
+        output2 = Apply_Detection(imm, output1.EmptyAreaMask, Input, UserInfo);                       
+                
     end
 
 end
 
-function [imm2, imObjects_WithInfo, imObjects] = Apply_Detection(imm, mask,ActualArea)
+function Input = readingInputData(Directory)
 
-    mask2 = imclose(mask,strel('disk',2));
-    mask2 = imopen(mask2,strel('disk',4));
-    %%
-    obj = regionprops(mask2,'PixelIdxList','Area','Centroid','BoundingBox');
-    Area1 = cat(1,obj.Area);
-    obj2 = obj(Area1 > 200 & Area1 < 1e5);
-    Centroid = cat(1,obj2.Centroid);
-    Area = cat(1,obj2.Area);
-    %%
-%     N = 256/length(obj2);
-%     maskColoredB = mask2*0;
-%     for oIx = 1:length(obj2)
-%         maskColoredB(cat(1,obj2(oIx).PixelIdxList)) = int8(N*oIx);
-%     end
+    Ar = load(Directory.GeoArea);
+    Input.GeoAreaValues = Ar.area;
+    Input.GeoAreaValues(isnan(Input.GeoAreaValues)) = 0;
+    Input.Land = imread(Directory.LandMask) > 100;
     
-    maskColored = mask2*0;
-    maskColored(cat(1,obj2.PixelIdxList)) = 1;
+end
 
-    %%
-%     imFinal2 = label2rgb(maskColoredB,'spring','c');
-%     background = backgroundDetector(maskColored);
-%     imFinal2(background == 1) = 0;
+function output = Apply_Detection(imm, EmptyAreaMask, Input, UserInfo)
     
-%     CC = bwconncomp(mask2);
-%     L = labelmatrix(CC);
-    edgeImage = edge(maskColored);
-    imm2 = imm;
-    imm2(:,:,1) = imm(:,:,1) + 255*uint8(edgeImage);
-    imm2(:,:,2) = imm(:,:,2) + 248*uint8(edgeImage);
-    
-    L = bwlabel(maskColored);
-    imObjects = label2rgb(L);
+    mask = imclose(EmptyAreaMask,strel('disk',2));
+    mask = imopen(mask,strel('disk',4));
 
-    if ~isempty(Centroid)
-        objectArea = Area*0;
-        for oIx=1:length(obj2)
-            objectArea(oIx) = round(sum(ActualArea(cat(1,obj2(oIx).PixelIdxList))));
-        end
-        imObjects_WithInfo = insertMarker(imObjects,Centroid,'x','Color','black');
-        imObjects_WithInfo = insertText(imObjects_WithInfo,Centroid,objectArea,'TextColor','black','BoxOpacity',0);
+    obj = regionprops(mask,'PixelIdxList','Area','Centroid','BoundingBox');    
+    
+    %% Filtering object of interest based on size 
+    
+    disp('         Filtering object of interest based on size')
+    
+	Interested = FilteringObjects(obj, Input.GeoAreaValues, UserInfo, size(mask) , 'Interested');
+          
+    if UserInfo.Overlay.ShowAllObjects || UserInfo.WriteImage.EmptyArea.ObjectsOfNoInterest.Flag
+        NotInterested = FilteringObjects(obj, Input.GeoAreaValues, UserInfo, size(mask), 'NotInterested');
+    end
+     
+    %% overlaying borders & Info on image
+    
+    disp('         overlaying borders & Info on image')
+    
+	output.Image = overlayObjectsOnImage(imm, Interested.edgeImage, 'Interested');
+    output.Image = overlayInfoOnImage(output.Image, Interested.Info, UserInfo.Overlay.Color.ObjectsOfInterest, UserInfo);
+          
+    if UserInfo.Overlay.ShowAllObjects
+        output.Image = overlayObjectsOnImage(output.Image, NotInterested.edgeImage, 'NotInterested');
+        output.Image = overlayInfoOnImage(output.Image, NotInterested.Info, UserInfo.Overlay.Color.ObjectsOfNoInterest, UserInfo);
+    end
+    
+    if UserInfo.WriteImage.InfoOverlayedImage.Flag
+        imwrite(output.Image, [UserInfo.Directory.Output , UserInfo.name, UserInfo.WriteImage.InfoOverlayedImage.Tag , '.jpg'])
+    end   
+    
+    
+    %% overlay info on object mask
+    
+    if UserInfo.WriteImage.EmptyArea.ObjectsOfInterest.Flag
         
-        imm2 = insertMarker(imm2,Centroid,'x','Color','yellow');
-        imm2 = insertText(imm2,Centroid,objectArea,'TextColor','yellow','BoxOpacity',0,'FontSize',20);        
+        disp('         overlaying borders & Info on Object Mask')        
+        
+        Interested.ColoredObjectsMask = overlayInfoOnColoredObjectsMask(Interested.ColoredObjectsMask, Interested.Info, 'black');
+        output.ObjectsData = Interested;
+        
+        imwrite(Interested.ColoredObjectsMask, [UserInfo.Directory.Output , UserInfo.name, UserInfo.WriteImage.EmptyArea.ObjectsOfInterest.Tag, '.jpg'])
+        
+        if UserInfo.WriteImage.EmptyArea.ObjectsOfNoInterest.Flag
+            
+            NotInterested.ColoredObjectsMask = overlayInfoOnColoredObjectsMask(NotInterested.ColoredObjectsMask, NotInterested.Info, 'black');
+            output.removedObjectsData = NotInterested;
+
+            imwrite(NotInterested.ColoredObjectsMask, [UserInfo.Directory.Output , UserInfo.name, UserInfo.WriteImage.EmptyArea.ObjectsOfNoInterest.Tag, '.jpg'])
+
+        end
+        
+    end
+        
+
+
+end
+
+function ColoredObjectsMask = overlayInfoOnColoredObjectsMask(ColoredObjectsMask, Info, color)
+    if ~isempty(Info.Centroid)       
+        ColoredObjectsMask = insertMarker(ColoredObjectsMask, Info.Centroid,'x','Color',color);
+        ColoredObjectsMask = insertText(ColoredObjectsMask, Info.Centroid, Info.Area,'TextColor',color,'BoxOpacity',0);
+    end
+end
+
+function imm = overlayInfoOnImage(imm, Info, color, UserInfo)
+    if ~isempty(Info.Centroid)       
+        imm = insertMarker(imm, Info.Centroid,'x','Color',color);
+        imm = insertText(imm, Info.Centroid, Info.Area,'TextColor',color,'BoxOpacity',0,'FontSize',20);        
+        imm = insertText(imm, [150,150], ['Unit: ' UserInfo.unit],'TextColor','red','BoxOpacity',0.5,'FontSize',40);       
+        imm = insertText(imm, [150,230], ['name: ' UserInfo.name],'TextColor','red','BoxOpacity',0.5,'FontSize',40);       
+        imm = insertText(imm, [150,310], ['object size: ' num2str([UserInfo.ObjectSize.min, UserInfo.ObjectSize.max])],'TextColor','red','BoxOpacity',0.5,'FontSize',40);       
+    end
+end
+
+function imm = overlayObjectsOnImage(imm, edgeImage, mode)
+
+    if strcmp(mode, 'Interested')
+        imm(:,:,1) = imm(:,:,1) + 255*uint8(edgeImage);
+        imm(:,:,2) = imm(:,:,2) + 248*uint8(edgeImage);
     else
-        imObjects_WithInfo = imObjects;
-        imm2 = imm;
+        imm(:,:,3) = imm(:,:,3) + 255*uint8(edgeImage);
+    end
+end
+
+function output = FilteringObjects(obj, GeoAreaValues, UserInfo, shapeMsk, mode)
+
+    if UserInfo.Overlay.Mode == 1
+        Area = cat(1,obj.Area); 
+    else
+        Area = ActualGeoArea(obj,GeoAreaValues);
+    end
+
+    if strcmp(mode, 'Interested')
+        objects = obj(Area >= UserInfo.ObjectSize.min & Area <= UserInfo.ObjectSize.max);
+    else
+        objects = obj(Area < UserInfo.ObjectSize.min | Area > UserInfo.ObjectSize.max);
+    end
+
+    ObjectsMask = zeros(shapeMsk);
+    ObjectsMask(cat(1,objects.PixelIdxList)) = 1;
+
+    output.edgeImage = edge(ObjectsMask);
+    
+    L = bwlabel(ObjectsMask);
+    output.ColoredObjectsMask = label2rgb(L);
+    
+    output.Info.Centroid = cat(1,objects.Centroid);
+    
+    if UserInfo.Overlay.Mode == 1
+        output.Info.Area = cat(1,objects.Area); 
+    else
+        output.Info.Area = ActualGeoArea(objects,GeoAreaValues);
     end
     
 end
@@ -91,4 +158,11 @@ function background = backgroundDetector(mask)
     background = mask*0;
     background(mask ==0) = 1;
     background = cat(3,background,background,background);
+end
+
+function GeoArea = ActualGeoArea(obj,GeoAreaValues)
+    GeoArea = zeros(length(obj),1);
+    for Ix=1:length(obj)
+        GeoArea(Ix) = round(sum(GeoAreaValues(cat(1,obj(Ix).PixelIdxList))));
+    end
 end

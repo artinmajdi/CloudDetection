@@ -1,19 +1,16 @@
-function [cloudMask, cloudMaskGray, EmptyAreaMask] = creatingEmptyAreaMask(im , Land)
+function output = creatingEmptyAreaMask(im , Land, UserInfo)
 
-% Land = imread([Dir , 'code/referenceImages/LandMask_from_LatLong.jpg']) > 100;
-% List = func_listImages([Dir , '/images']);
-% 
-% for ind = 1:length(List)
-%     disp(List(ind).name)
-%     im = imread([List(ind).folder , '/' , List(ind).name]);
+    disp('         Normalizing the Image')
+    im = normalizing(im);
 
-im = normalizing(im);
-im = removingLandArea(im , Land);
-[cloudMask,cloudMaskGray] = CloudMaskDetecter(im);
-EmptyAreaMask = emptyAreas(cloudMaskGray,Land);
+    disp('         Removing Land Area')
+    im = removingLandArea(im , Land);
 
+    disp('         Detecting Clouds')
+    [output.cloudMask, output.cloudMaskGray] = CloudMaskDetecter(im, UserInfo);
 
-% end
+    disp('         Creating Empty Area Mask')
+    output.EmptyAreaMask = emptyAreas(output.cloudMaskGray,Land, UserInfo);
 
 end
 
@@ -30,7 +27,7 @@ function im = normalizing(im)
     im = (im - min(im(:))) / (max(im(:)) - min(im(:)));
 end
 
-function [cloudMask,cloudMaskGray] = CloudMaskDetecter(im)
+function [cloudMask,cloudMaskGray] = CloudMaskDetecter(im, UserInfo)
     cloudMask = im*0;
     for i = 1:3 
         [counts,x] = imhist(im(:,:,i),256);
@@ -40,9 +37,22 @@ function [cloudMask,cloudMaskGray] = CloudMaskDetecter(im)
         cloudMask(:,:,i) = im(:,:,i) > th;
     end
     cloudMaskGray = [sum(cloudMask,3) == 3];
+    
+    if UserInfo.WriteImage.CloudMask.Flag
+        imwrite(cloudMaskGray, [UserInfo.Directory.Output , UserInfo.name, UserInfo.WriteImage.CloudMask.Tag , '.jpg'])
+    end
+        
 end
 
-function msk = emptyAreas(cloudMask,land)
-    msk = 1 - cloudMask;
-    msk(land == 1) = 0;
+function EmptyAreaMask = emptyAreas(cloudMask,land, UserInfo)
+
+    EmptyAreaMask = 1 - cloudMask;
+    EmptyAreaMask(land == 1) = 0;
+    
+    EmptyAreaMask = EmptyAreaMask > 0;
+    
+    if UserInfo.WriteImage.EmptyAreaMask.Flag
+        imwrite(EmptyAreaMask, [UserInfo.Directory.Output , UserInfo.name, UserInfo.WriteImage.EmptyAreaMask.Tag, '.jpg'])
+    end
+
 end
