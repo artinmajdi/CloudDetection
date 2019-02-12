@@ -10,14 +10,14 @@ function [output1, output2] = extractObjects(UserInfo)
     
     ListImages = func_listImages(UserInfo.Directory.Images);
     
-    for ind = 1:length(ListImages)
+    for ind = 1 % :length(ListImages)
                 
         UserInfo.name = strsplit(ListImages(ind).name,'.jpg'); UserInfo.name = UserInfo.name{1};
         
         disp(['ind: (',num2str(ind),'/',num2str(length(ListImages)), ')   ', UserInfo.name])
 
         imm = imread([UserInfo.Directory.Images , UserInfo.name, '.jpg']);
-        output1  = creatingEmptyAreaMask(imm , Input.Land, UserInfo);
+        output1  = creatingEmptyAreaMask(imm , Input, UserInfo);
         
         output2 = Apply_Detection(imm, output1.EmptyAreaMask, Input, UserInfo);                       
                 
@@ -31,6 +31,8 @@ function Input = readingInputData(Directory)
     Input.GeoAreaValues = Ar.area;
     Input.GeoAreaValues(isnan(Input.GeoAreaValues)) = 0;
     Input.Land = imread(Directory.LandMask) > 100;
+    Input.ROI = imread(Directory.ROI);
+    Input.ROI = Input.ROI(:,:,1) > 100;
     
 end
 
@@ -45,10 +47,10 @@ function output = Apply_Detection(imm, EmptyAreaMask, Input, UserInfo)
     
     disp('         Filtering object of interest based on size')
     
-	Interested = FilteringObjects(obj, Input.GeoAreaValues, UserInfo, size(mask) , 'Interested');
+	Interested = FilteringObjects(obj, Input, UserInfo, size(mask) , 'Interested');
           
     if UserInfo.Overlay.ShowAllObjects || UserInfo.WriteImage.EmptyArea.ObjectsOfNoInterest.Flag
-        NotInterested = FilteringObjects(obj, Input.GeoAreaValues, UserInfo, size(mask), 'NotInterested');
+        NotInterested = FilteringObjects(obj, Input, UserInfo, size(mask), 'NotInterested');
     end
      
     %% overlaying borders & Info on image
@@ -62,7 +64,7 @@ function output = Apply_Detection(imm, EmptyAreaMask, Input, UserInfo)
         output.Image = overlayObjectsOnImage(output.Image, NotInterested.edgeImage, 'NotInterested');
         output.Image = overlayInfoOnImage(output.Image, NotInterested.Info, UserInfo.Overlay.Color.ObjectsOfNoInterest, UserInfo);
     end
-    
+        
     if UserInfo.WriteImage.InfoOverlayedImage.Flag
         imwrite(output.Image, [UserInfo.Directory.Output , UserInfo.name, UserInfo.WriteImage.InfoOverlayedImage.Tag , '.jpg'])
     end   
@@ -112,7 +114,7 @@ function imm = overlayInfoOnImage(imm, Info, color, UserInfo)
 end
 
 function imm = overlayObjectsOnImage(imm, edgeImage, mode)
-
+   
     if strcmp(mode, 'Interested')
         imm(:,:,1) = imm(:,:,1) + 255*uint8(edgeImage);
         imm(:,:,2) = imm(:,:,2) + 248*uint8(edgeImage);
@@ -121,12 +123,12 @@ function imm = overlayObjectsOnImage(imm, edgeImage, mode)
     end
 end
 
-function output = FilteringObjects(obj, GeoAreaValues, UserInfo, shapeMsk, mode)
+function output = FilteringObjects(obj, Input, UserInfo, shapeMsk, mode)
 
     if UserInfo.Overlay.Mode == 1
         Area = cat(1,obj.Area); 
     else
-        Area = ActualGeoArea(obj,GeoAreaValues);
+        Area = ActualGeoArea(obj,Input.GeoAreaValues);
     end
 
     if strcmp(mode, 'Interested')
@@ -135,10 +137,14 @@ function output = FilteringObjects(obj, GeoAreaValues, UserInfo, shapeMsk, mode)
         objects = obj(Area < UserInfo.ObjectSize.min | Area > UserInfo.ObjectSize.max);
     end
 
+    objects = removeObjects_NotIn_ROI(UserInfo, Input, objects);
+
     ObjectsMask = zeros(shapeMsk);
     ObjectsMask(cat(1,objects.PixelIdxList)) = 1;
-
+    
     output.edgeImage = edge(ObjectsMask);
+    ObjectsMask2 = imfill(ObjectsMask);
+    objectsF = regionprops(edge(ObjectsMask2), 'Area', 'PixelList','PixelIdxList','MajorAxisLength','MinorAxisLength');
     
     L = bwlabel(ObjectsMask);
     output.ColoredObjectsMask = label2rgb(L);
@@ -148,9 +154,22 @@ function output = FilteringObjects(obj, GeoAreaValues, UserInfo, shapeMsk, mode)
     if UserInfo.Overlay.Mode == 1
         output.Info.Area = cat(1,objects.Area); 
     else
-        output.Info.Area = ActualGeoArea(objects,GeoAreaValues);
+        output.Info.Area = ActualGeoArea(objects,Input.GeoAreaValues);
     end
     
+end
+
+function objects = removeObjects_NotIn_ROI(UserInfo, Input, objects)
+
+    if (UserInfo.Overlay.ApplyROI_To_CloudOrFinalObjects == 2)   
+        FinalObj = [];
+        for i = 1:length(objects)
+            if sum(sum(Input.ROI(cat(1,objects(i).PixelIdxList)))) ~= 0
+                FinalObj = [FinalObj;objects(i)];
+            end
+        end
+        objects = FinalObj;
+    end
 end
 
 function background = backgroundDetector(mask)

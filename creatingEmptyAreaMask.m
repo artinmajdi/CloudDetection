@@ -1,16 +1,20 @@
-function output = creatingEmptyAreaMask(im , Land, UserInfo)
+function output = creatingEmptyAreaMask(im , Input, UserInfo)
 
     disp('         Normalizing the Image')
     im = normalizing(im);
 
     disp('         Removing Land Area')
-    im = removingLandArea(im , Land);
+    im = removingLandArea(im , Input.Land);
 
     disp('         Detecting Clouds')
     [output.cloudMask, output.cloudMaskGray] = CloudMaskDetecter(im, UserInfo);
 
     disp('         Creating Empty Area Mask')
-    output.EmptyAreaMask = emptyAreas(output.cloudMaskGray,Land, UserInfo);
+    output.EmptyAreaMask = emptyAreas(output.cloudMaskGray,Input.Land, UserInfo);
+    
+    if UserInfo.Overlay.ApplyROI_To_CloudOrFinalObjects == 1
+        output.EmptyAreaMask(Input.ROI == 0) = 0;
+    end
 
 end
 
