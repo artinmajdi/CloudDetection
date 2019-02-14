@@ -35,7 +35,9 @@ function [cloudMask,cloudMaskGray] = CloudMaskDetecter(im, UserInfo)
     cloudMask = im*0;
     for i = 1:3 
         [counts,x] = imhist(im(:,:,i),256);
-        th = otsuthresh(counts);
+%         th = otsuthresh(counts);
+        th2 = multithresh(im(:,:,i),3);
+        th = th2(2);
 
         % th2 = graythresh(im(:,:,i));
         cloudMask(:,:,i) = im(:,:,i) > th;

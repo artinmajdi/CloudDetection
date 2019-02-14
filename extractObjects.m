@@ -8,6 +8,7 @@ function [output1, output2] = extractObjects(UserInfo)
         UserInfo.unit = 'Pixel';
     end
     
+    
     ListImages = func_listImages(UserInfo.Directory.Images);
     
     for ind = 1 % :length(ListImages)
@@ -17,6 +18,12 @@ function [output1, output2] = extractObjects(UserInfo)
         disp(['ind: (',num2str(ind),'/',num2str(length(ListImages)), ')   ', UserInfo.name])
 
         imm = imread([UserInfo.Directory.Images , UserInfo.name, '.jpg']);
+        
+%         immOg = imm;
+        for i = 1:3
+            imm(:,:,i) = adapthisteq(imm(:,:,i));
+        end
+%         output1  = creatingEmptyAreaMask(immOg , Input, UserInfo);
         output1  = creatingEmptyAreaMask(imm , Input, UserInfo);
         
         output2 = Apply_Detection(imm, output1.EmptyAreaMask, Input, UserInfo);                       
@@ -24,7 +31,22 @@ function [output1, output2] = extractObjects(UserInfo)
     end
 
 end
+%%
 
+% imm2 = immOg;
+% A2 = output1En.EmptyAreaMask;
+% imm2(:,:,1) = imm2(:,:,1) + im2uint8(edge(A2));
+% ax(1) = subplot(121); imshow(imm2)
+% 
+% 
+% A2 = imopen(A2,strel('disk',4));
+% % A2 = output1En.EmptyAreaMask;
+% imm2 = imm;
+% imm2(:,:,1) = imm2(:,:,1) + im2uint8(edge(A2));
+% ax(2) = subplot(122); imshow(imm2) , title('enhanced')
+% linkaxes(ax)
+
+%%
 function Input = readingInputData(Directory)
 
     Ar = load(Directory.GeoArea);
@@ -33,15 +55,20 @@ function Input = readingInputData(Directory)
     Input.Land = imread(Directory.LandMask) > 100;
     Input.ROI = imread(Directory.ROI);
     Input.ROI = Input.ROI(:,:,1) > 100;
+    load(Directory.lat)
+    load(Directory.lon)
+    Input.lat = lat;
+    Input.lon = lon;
     
 end
 
 function output = Apply_Detection(imm, EmptyAreaMask, Input, UserInfo)
     
-    mask = imclose(EmptyAreaMask,strel('disk',2));
+%     mask = imclose(EmptyAreaMask,strel('disk',2));
+    mask = EmptyAreaMask;
     mask = imopen(mask,strel('disk',4));
 
-    obj = regionprops(mask,'PixelIdxList','Area','Centroid','BoundingBox');    
+    obj = regionprops(mask,'PixelIdxList','PixelList','Area','Centroid','BoundingBox');    
     
     %% Filtering object of interest based on size 
     
@@ -140,15 +167,35 @@ function output = FilteringObjects(obj, Input, UserInfo, shapeMsk, mode)
     objects = removeObjects_NotIn_ROI(UserInfo, Input, objects);
 
     ObjectsMask = zeros(shapeMsk);
-    ObjectsMask(cat(1,objects.PixelIdxList)) = 1;
+    ObjectsMask(cat(1,objects.PixelIdxList)) = 1 ;
+    ObjectsMask = ObjectsMask > 0;
+%     ObjectsMask = bwareaopen(ObjectsMask,50);
     
     output.edgeImage = edge(ObjectsMask);
-    ObjectsMask2 = imfill(ObjectsMask);
-    objectsF = regionprops(edge(ObjectsMask2), 'Area', 'PixelList','PixelIdxList','MajorAxisLength','MinorAxisLength');
+%     X = objects(1).PixelList;
+%     patch(X(:,1),X(:,2),'yellow')
+    ObjectsMaskFilled = edge(imfill(ObjectsMask,'holes'));
+    ObjectsMaskFilled = imclose(ObjectsMaskFilled,strel('disk',2));
+%     ObjectsMask2E = edge(ObjectsMask2);
+    
+    objectsF = regionprops( ObjectsMaskFilled, 'PixelIdxList','PixelList');  
+%     objectsF2 = regionprops( ObjectsMaskFilled, 'PixelList'); 
+    stats = regionprops('table', ObjectsMaskFilled, 'PixelIdxList','PixelList');  
+
+    for objIx = 1:length(objectsF)
+        objectsF(objIx).CentroidGeo = [mean(Input.lat(objectsF(objIx).PixelIdxList)) , mean(Input.lon(objectsF(objIx).PixelIdxList))];
+        objectsF(objIx).PixelListGeo = realPixelListANDCentroid(Input,objectsF(objIx).PixelList);
+    end
+    CentroidGeo = cat(1,objectsF.CentroidGeo);
+    PixelListGeo = {objectsF.PixelListGeo}';
+    output.Info.TableResults = [table(CentroidGeo) , stats , table(PixelListGeo)];
+%     x = imageWidth * ( pointLon - ImageExtentLeft ) / (ImageExtentRight - ImageExtentLeft);
+%     y = imageHeight * ( 1 - ( pointLat - ImageExtentBottom) / (ImageExtentTop - mImageExtentBottom));
+    
+    
     
     L = bwlabel(ObjectsMask);
-    output.ColoredObjectsMask = label2rgb(L);
-    
+    output.ColoredObjectsMask = label2rgb(L);    
     output.Info.Centroid = cat(1,objects.Centroid);
     
     if UserInfo.Overlay.Mode == 1
@@ -157,6 +204,15 @@ function output = FilteringObjects(obj, Input, UserInfo, shapeMsk, mode)
         output.Info.Area = ActualGeoArea(objects,Input.GeoAreaValues);
     end
     
+end
+
+function PixelListGeo = realPixelListANDCentroid(Input,PixelList)
+    PixelListGeo = PixelList*0;
+    sz = size(PixelList);
+    for i=1:sz(1)
+       PixelListGeo(i,:) = [ Input.lat(PixelList(i,2),PixelList(i,1))  ,  Input.lon(PixelList(i,2),PixelList(i,1))];           
+    end 
+%     CentroidGeo1 = sum(PixelListGeo.*PixelList)./sum(PixelList);
 end
 
 function objects = removeObjects_NotIn_ROI(UserInfo, Input, objects)

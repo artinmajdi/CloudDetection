@@ -19,6 +19,9 @@ UserInfo.Directory.Images = '/media/data1/artin/CloudData/images/';
 UserInfo.Directory.GeoArea = '/media/data1/artin/CloudData/code/referenceImages/areaMatrix.mat';
 UserInfo.Directory.LandMask = '/media/data1/artin/CloudData/code/referenceImages/LandMask_from_LatLong.jpg';
 UserInfo.Directory.ROI = '/media/data1/artin/CloudData/code/referenceImages/RegionOfInterest.jpg';
+UserInfo.Directory.lat = '/media/data1/artin/CloudData/code/referenceImages/lat.mat';
+UserInfo.Directory.lon = '/media/data1/artin/CloudData/code/referenceImages/lon.mat';
+
 
 UserInfo.Directory.Output = UserInfo.Directory.Images;
 
