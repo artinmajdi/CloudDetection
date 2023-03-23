@@ -11,10 +11,10 @@ warnings.simplefilter("once",category=Warning)
 
 Dir = '/media/data1/artin/CloudData/images/'
 
-Land = imread(Dir + 'Land.jpg')
+Land = imread(f'{Dir}Land.jpg')
 Land2 = Land[...,0] > 100
 
-RegionOfInterest = imread(Dir + 'RegionOfInterest.jpg')
+RegionOfInterest = imread(f'{Dir}RegionOfInterest.jpg')
 RegionOfInterest = RegionOfInterest[...,0] > 100
 
 def creatinMask(Dir, Land2):
@@ -60,27 +60,27 @@ def creatingThePatternMask(Dir, Land2, RegionOfInterest):
         imwrite(Dir + lst.split('.jpg')[0] + '_Pattern.jpg' , msk2)
 
 def creatingTheVideo(Dir):
-        # image_folder = 'images'
-        video_name = 'video.avi'
-        Dir2 = Dir
-        List = [i for i in os.listdir(Dir2) if 'goes' in i and '_Pattern.jpg' not in i and 'mask.jpg' not in i]
-        List.sort()
-        frame = cv2.imread(os.path.join(Dir2, List[0].split('.jpg')[0] + '_mask_Pattern.jpg' ))
-        height, width, layers = frame.shape
+    # image_folder = 'images'
+    video_name = 'video.avi'
+    Dir2 = Dir
+    List = [i for i in os.listdir(Dir2) if 'goes' in i and '_Pattern.jpg' not in i and 'mask.jpg' not in i]
+    List.sort()
+    frame = cv2.imread(os.path.join(Dir2, List[0].split('.jpg')[0] + '_mask_Pattern.jpg' ))
+    height, width, layers = frame.shape
 
-        video = cv2.VideoWriter(Dir2 + 'pattern.avi', 0, 3, (width,height))
-        video2 = cv2.VideoWriter(Dir2 + 'original.avi', 0, 3, (width,height))
+    video = cv2.VideoWriter(f'{Dir2}pattern.avi', 0, 3, (width,height))
+    video2 = cv2.VideoWriter(f'{Dir2}original.avi', 0, 3, (width,height))
 
-        for image in tqdm(List):
+    for image in tqdm(List):
 
-                im = cv2.imread(os.path.join(Dir2, image))
-                pattern = cv2.imread(os.path.join(Dir2, image.split('.jpg')[0] + '_mask_Pattern.jpg'))
-                # A = np.concatenate((im,pattern),axis=1)
-                video.write(pattern)
-                video2.write(im)
+            im = cv2.imread(os.path.join(Dir2, image))
+            pattern = cv2.imread(os.path.join(Dir2, image.split('.jpg')[0] + '_mask_Pattern.jpg'))
+            # A = np.concatenate((im,pattern),axis=1)
+            video.write(pattern)
+            video2.write(im)
 
-        cv2.destroyAllWindows()
-        video.release()
+    cv2.destroyAllWindows()
+    video.release()
 
 
 creatinMask(Dir, Land2)
